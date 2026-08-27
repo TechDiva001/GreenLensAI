@@ -5,6 +5,8 @@ ultralytics
 huggingface_hub
 requests
 pydantic
+pydantic-settings
 python-multipart
 imagehash
 pillow
+supabase
