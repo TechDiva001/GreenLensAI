@@ -40,7 +40,7 @@ class VisionAnalysisResult(BaseModel):
     # Severity & Meta
     severity: str = Field(description="Severity based on blockage: 'low' (0-20), 'moderate' (21-40), 'significant' (41-60), 'high' (61-80), 'critical' (81-100)")
     confidence: float = Field(description="Confidence score for this analysis, between 0.0 and 1.0")
-    bounding_boxes: List[Tuple[float, float, float, float, str]] = Field(
+    bounding_boxes: list = Field(
         default=[],
         description="List of bounding boxes for detected waste or drains. Format: [ymin, xmin, ymax, xmax, label] where coordinates are normalized 0-1000"
     )
