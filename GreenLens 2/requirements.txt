@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+google-genai
+ultralytics
+huggingface_hub
+requests
+pydantic
+python-multipart
+imagehash
+pillow
