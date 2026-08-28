@@ -21,7 +21,27 @@ def create_report(report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         }).execute()
         
         if response.data:
-            return response.data[0]
+            report = response.data[0]
+            db_report_id = report["id"]
+            
+            # Insert media
+            supabase_client.table("report_media").insert({
+                "report_id": db_report_id,
+                "media_type": "IMAGE",
+                "file_url": report_data.get("image_url")
+            }).execute()
+            
+            # Insert AI Risk Assessments
+            supabase_client.table("ai_risk_assessments").insert({
+                "report_id": db_report_id,
+                "flood_risk_score": report_data.get("flood_risk_score", 0),
+                "waste_risk_score": report_data.get("waste_risk_score", 0),
+                "overall_risk_score": report_data.get("overall_risk_score", 0),
+                "risk_level": report_data.get("risk_level", "LOW"),
+                "reasoning": report_data.get("reasoning", "AI Assessment")
+            }).execute()
+            
+            return report
         return None
     except Exception as e:
         logger.exception(f"Failed to insert report into Supabase: {str(e)}")
