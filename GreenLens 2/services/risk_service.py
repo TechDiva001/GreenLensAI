@@ -67,17 +67,15 @@ def calculate_flood_risk_v2(
     total_score = min(100.0, total_score)
     
     # Set risk level categories
-    if total_score <= 20.0:
+    if total_score <= 25.0:
         risk_level = "LOW"
-    elif total_score <= 40.0:
-        risk_level = "MODERATE"
-    elif total_score <= 60.0:
-        risk_level = "SIGNIFICANT"
-    elif total_score <= 80.0:
+    elif total_score <= 50.0:
+        risk_level = "MEDIUM"
+    elif total_score <= 75.0:
         risk_level = "HIGH"
     else:
         risk_level = "CRITICAL"
-        
+
     return {
         "risk_score": total_score,
         "risk_level": risk_level,
