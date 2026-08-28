@@ -13,7 +13,7 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Local Model Configurations
-YOLO_MODEL_NAME = "kendrickfff/waste-classification-yolov8-ken"
+YOLO_MODEL_NAME = "yolov8n.pt"
 
 # Open-Meteo Weather API Base URL
 OPEN_METEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
