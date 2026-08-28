@@ -104,6 +104,7 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
     # Prepare dict for CRUD
     crud_data = {
         "user_id": req.user_id,
+        "municipality_id": req.municipality_id,
         "description": req.description,
         "latitude": req.latitude,
         "longitude": req.longitude,
