@@ -13,7 +13,7 @@ def create_report(report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "user_id": report_data["user_id"],
             "title": "AI Auto-Generated Report",
             "description": report_data.get("description", ""),
-            "status": "Submitted" if report_data.get("fraud_flag") == False else "Under Verification",
+            "status": "SUBMITTED" if report_data.get("fraud_flag") == False else "UNDER_REVIEW",
             "latitude": report_data["latitude"],
             "longitude": report_data["longitude"],
             "ai_report_id": report_data["report_id"]
@@ -28,7 +28,7 @@ def create_report(report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def verify_report_cleanup(ai_report_id: str, verified: bool) -> bool:
     try:
-        status = "Resolved" if verified else "Verification Failed"
+        status = "RESOLVED" if verified else "REJECTED"
         supabase_client.table("reports").update({"status": status}).eq("ai_report_id", ai_report_id).execute()
         return True
     except Exception as e:
