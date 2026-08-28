@@ -174,16 +174,14 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             sediment_acc = min(90, int(blockage_percentage * 0.4))
             veg_obs = min(90, int(blockage_percentage * 0.3))
             
-            if blockage_percentage <= 20:
-                severity = "low"
-            elif blockage_percentage <= 40:
-                severity = "moderate"
-            elif blockage_percentage <= 60:
-                severity = "significant"
-            elif blockage_percentage <= 80:
-                severity = "high"
+            if blockage_percentage <= 25:
+                severity = "LOW"
+            elif blockage_percentage <= 50:
+                severity = "MEDIUM"
+            elif blockage_percentage <= 75:
+                severity = "HIGH"
             else:
-                severity = "critical"
+                severity = "CRITICAL"
                 
         # Merge quality details
         return {
