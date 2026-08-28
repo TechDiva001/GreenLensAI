@@ -259,7 +259,7 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='Gemini 2.5 Flash Lite',
             contents=[img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
