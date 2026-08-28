@@ -26,7 +26,7 @@ logger = logging.getLogger("GreenLensAI_V2")
 
 def download_image(url: str, filepath: str) -> bool:
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=15)
         response.raise_for_status()
         with open(filepath, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -80,7 +80,7 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
     # Compile the result
     result = AiAnalysisResult(
         report_id=report_id,
-        status="Submitted" if not fraud_flag else "Under Verification",
+        status="SUBMITTED" if not fraud_flag else "UNDER_REVIEW",
         fraud_flag=fraud_flag,
         waste_detected=vision_res.get("waste_detected", False),
         waste_type=vision_res.get("waste_type", "none"),
