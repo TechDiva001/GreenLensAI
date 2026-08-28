@@ -101,7 +101,6 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         risk_contributions=risk_res.get("contributions")
     )
     
-    # Prepare dict for CRUD
     crud_data = {
         "user_id": req.user_id,
         "municipality_id": req.municipality_id,
@@ -109,7 +108,13 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         "latitude": req.latitude,
         "longitude": req.longitude,
         "report_id": report_id,
-        "fraud_flag": fraud_flag
+        "fraud_flag": fraud_flag,
+        "image_url": req.image_url,
+        "flood_risk_score": float(risk_res.get("risk_score", 0.0)),
+        "waste_risk_score": float(vision_res.get("blockage_percentage", 0.0)),
+        "overall_risk_score": float(risk_res.get("risk_score", 0.0)),
+        "risk_level": risk_res.get("risk_level", "LOW"),
+        "reasoning": f"Flood Risk: {risk_res.get('risk_level', 'LOW')}. Waste detected: {vision_res.get('waste_detected', False)}."
     }
     
     # 7. Write to Supabase using CRUD layer
