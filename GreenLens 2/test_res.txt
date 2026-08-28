@@ -1,0 +1,2 @@
+400
+{"detail":"Failed to download image from the provided URL"}
