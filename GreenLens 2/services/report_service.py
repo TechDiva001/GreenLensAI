@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 
 from schemas.report_schema import AnalyzeImageRequest, AiAnalysisResult
-from crud.report_crud import create_report
+# Removed crud.report_crud import
 from core.config import settings
 
 # In a real FBA architecture, we would import from a properly separated services layer.
@@ -101,23 +101,7 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         risk_contributions=risk_res.get("contributions")
     )
     
-    crud_data = {
-        "user_id": req.user_id,
-        "municipality_id": req.municipality_id,
-        "description": req.description,
-        "latitude": req.latitude,
-        "longitude": req.longitude,
-        "report_id": report_id,
-        "fraud_flag": fraud_flag,
-        "image_url": req.image_url,
-        "flood_risk_score": float(risk_res.get("risk_score", 0.0)),
-        "waste_risk_score": float(vision_res.get("blockage_percentage", 0.0)),
-        "overall_risk_score": float(risk_res.get("risk_score", 0.0)),
-        "risk_level": risk_res.get("risk_level", "LOW"),
-        "reasoning": f"Flood Risk: {risk_res.get('risk_level', 'LOW')}. Waste detected: {vision_res.get('waste_detected', False)}."
-    }
-    
-    # 7. Write to Supabase using CRUD layer
-    create_report(crud_data)
+    # 7. Write to Supabase is now handled by the frontend
+    # to maintain strict RLS boundaries and a stateless backend.
     
     return result
