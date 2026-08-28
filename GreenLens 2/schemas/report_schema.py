@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 class AnalyzeImageRequest(BaseModel):
     image_url: str
     user_id: str
+    municipality_id: str
     latitude: float
     longitude: float
     description: str = ""

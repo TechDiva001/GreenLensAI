@@ -11,6 +11,7 @@ def create_report(report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     try:
         response = supabase_client.table("reports").insert({
             "user_id": report_data["user_id"],
+            "municipality_id": report_data["municipality_id"],
             "title": "AI Auto-Generated Report",
             "description": report_data.get("description", ""),
             "status": "SUBMITTED" if report_data.get("fraud_flag") == False else "UNDER_REVIEW",
