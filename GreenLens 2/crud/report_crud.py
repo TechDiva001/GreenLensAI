@@ -24,7 +24,7 @@ def create_report(report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             return response.data[0]
         return None
     except Exception as e:
-        logger.exception("Failed to insert report into Supabase")
+        logger.exception(f"Failed to insert report into Supabase: {str(e)}")
         return None
 
 def verify_report_cleanup(ai_report_id: str, verified: bool) -> bool:
