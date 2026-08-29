@@ -2,10 +2,11 @@ import os
 import cv2
 import numpy as np
 import logging
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from PIL import Image
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import GEMINI_API_KEY, YOLO_MODEL_NAME
 
@@ -89,38 +90,62 @@ def check_image_quality_locally(image_path: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error checking image quality locally: {e}")
-        # Default safe fallback
         return {
             "quality_score": 90,
             "usable": True,
             "reasons": []
         }
 
-def load_local_yolo_model():
+_cached_yolo_model = None
+_yolo_instance = None
+
+def load_local_yolo_model() -> str:
     """
-    Downloads and loads the YOLOv8 model from Hugging Face, or falls back to the default model.
+    Returns local YOLOv8 weights path or downloads from HF if repo_id is valid.
     """
-    try:
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id=YOLO_MODEL_NAME,
-            filename="best.pt"
-        )
-        return model_path
-    except Exception as e:
-        logger.warning(f"Could not load HuggingFace model: {e}. Falling back to default yolov8n.pt")
-        return "yolov8n.pt"
+    global _cached_yolo_model
+    if _cached_yolo_model and os.path.exists(_cached_yolo_model):
+        return _cached_yolo_model
+
+    local_candidates = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolov8n.pt"),
+        "yolov8n.pt",
+        YOLO_MODEL_NAME
+    ]
+    for cand in local_candidates:
+        if cand and os.path.exists(cand):
+            _cached_yolo_model = cand
+            return cand
+
+    if "/" in YOLO_MODEL_NAME:
+        try:
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(repo_id=YOLO_MODEL_NAME, filename="best.pt")
+            _cached_yolo_model = model_path
+            return model_path
+        except Exception as e:
+            logger.warning(f"Could not load HuggingFace model {YOLO_MODEL_NAME}: {e}")
+
+    _cached_yolo_model = "yolov8n.pt"
+    return "yolov8n.pt"
+
+def get_yolo_instance():
+    """
+    Singleton cached YOLO model instance for instant inference.
+    """
+    global _yolo_instance
+    if _yolo_instance is None:
+        from ultralytics import YOLO
+        model_file = load_local_yolo_model()
+        _yolo_instance = YOLO(model_file)
+    return _yolo_instance
 
 def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, Any]:
     """
     Runs local YOLOv8 waste detection and populates all vision schema attributes.
     """
     try:
-        from ultralytics import YOLO
-        
-        model_file = load_local_yolo_model()
-        model = YOLO(model_file)
-        
+        model = get_yolo_instance()
         results = model.predict(image_path, verbose=False)
         result = results[0]
         
@@ -166,7 +191,9 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
         sediment_acc = 0
         veg_obs = 0
         
-        if waste_detected:
+        # Only set drain_detected if specific drain class is in detected classes
+        drain_classes = [c.lower() for c in detected_classes if any(k in c.lower() for k in ['drain', 'gutter', 'culvert', 'ditch'])]
+        if len(drain_classes) > 0:
             drain_detected = True
             drainage_structure = "open gutter"
             blockage_percentage = min(95, int(estimated_waste_coverage * 1.1))
@@ -175,22 +202,27 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             veg_obs = min(90, int(blockage_percentage * 0.3))
             
             if blockage_percentage <= 25:
-                severity = "LOW"
+                severity = "low"
             elif blockage_percentage <= 50:
-                severity = "MEDIUM"
+                severity = "moderate"
             elif blockage_percentage <= 75:
-                severity = "HIGH"
+                severity = "high"
             else:
-                severity = "CRITICAL"
+                severity = "critical"
+        elif waste_detected:
+            # Waste is detected, but on open ground/road with no verified drain
+            drain_detected = False
+            drainage_structure = "none"
+            blockage_percentage = 0
+            severity = "low" if estimated_waste_coverage <= 30 else "moderate"
                 
-        # Merge quality details
         return {
             "waste_detected": waste_detected,
             "waste_type": waste_type,
             "estimated_waste_coverage": estimated_waste_coverage,
             "waste_density": waste_density,
             "waste_inside_drain": drain_detected,
-            "waste_beside_drain": not drain_detected if waste_detected else False,
+            "waste_beside_drain": waste_detected and not drain_detected,
             
             "drain_detected": drain_detected,
             "drainage_structure": drainage_structure,
@@ -207,8 +239,9 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             "usable": local_quality.get("usable", True),
             
             "severity": severity,
-            "confidence": round(float(boxes.conf.mean().item()), 2) if len(boxes) > 0 else 0.90,
-            "bounding_boxes": bounding_boxes
+            "confidence": round(float(boxes.conf.mean().item()), 2) if len(boxes) > 0 else 0.85,
+            "bounding_boxes": bounding_boxes,
+            "items_detected_count": len(detected_classes)
         }
     except Exception as e:
         logger.error(f"Error running local YOLO model: {e}")
@@ -217,26 +250,27 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             "waste_type": "mixed",
             "estimated_waste_coverage": 40,
             "waste_density": "medium",
-            "waste_inside_drain": True,
-            "waste_beside_drain": False,
-            "drain_detected": True,
-            "drainage_structure": "open gutter",
-            "blockage_percentage": 45,
-            "opening_obstruction": 45,
-            "water_flow_obstruction": 45,
-            "sediment_accumulation": 20,
-            "vegetation_obstruction": 10,
+            "waste_inside_drain": False,
+            "waste_beside_drain": True,
+            "drain_detected": False,
+            "drainage_structure": "none",
+            "blockage_percentage": 0,
+            "opening_obstruction": 0,
+            "water_flow_obstruction": 0,
+            "sediment_accumulation": 0,
+            "vegetation_obstruction": 0,
             "is_screenshot": False,
             "is_irrelevant": False,
             "is_manipulated": False,
             "quality_score": local_quality.get("quality_score", 90),
             "usable": local_quality.get("usable", True),
-            "severity": "significant",
+            "severity": "low",
             "confidence": 0.80,
-            "bounding_boxes": []
+            "bounding_boxes": [],
+            "items_detected_count": 0
         }
 
-def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Calls Gemini API to analyze waste, drainage, and validation metrics using structured response schemas.
     """
@@ -248,16 +282,18 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         img = Image.open(image_path)
         
         prompt = (
-            "Analyze this image of a roadside, urban street, or drainage area for environmental issues.\n"
+            "Analyze this environmental image with high precision.\n"
             "Assess the following:\n"
-            "1. Waste Detection: is waste present, type, coverage (0-100), density (high/medium/low), location inside/beside drain.\n"
-            "2. Drainage Detection: is a drain present, structure type, blockage (0-100), opening obstruction (0-100), water flow obstruction (0-100), sediment buildup (0-100), vegetation obstruction (0-100).\n"
-            "3. Image Quality: check if it's a screenshot, irrelevant image, or digitally manipulated image. Provide a quality score (0-100) and state if it is usable for municipal reporting.\n"
-            "4. Bounding boxes: extract normalized boxes [ymin, xmin, ymax, xmax, label] where coordinates are normalized 0-1000."
+            "1. Drainage Detection: Carefully inspect if a physical drainage infrastructure is present (such as an open concrete gutter, road trench, culvert, ditch, storm drain, or water channel). "
+            "If NO drain is present (e.g. open road, sidewalk, bare ground, floor, grassy yard with no gutter), strictly set drain_detected = false, drainage_structure = 'none', blockage_percentage = 0, opening_obstruction = 0, water_flow_obstruction = 0, waste_inside_drain = false.\n"
+            "2. Waste Detection: Is waste/trash present? Identify type ('plastic', 'paper', 'glass', 'metal', 'organic', 'textile', 'construction waste', 'mixed', or 'none'), estimated coverage percentage (0-100), density ('high', 'medium', 'low', 'none'). Is the waste inside a drain or on open ground beside a drain?\n"
+            "3. If a drain IS present, estimate blockage_percentage (0-100), opening obstruction, flow obstruction, sediment, and vegetation.\n"
+            "4. Image Quality: Check if it's a screenshot, irrelevant meme/selfie, or digitally manipulated. Provide quality score (0-100) and state if usable for municipal reporting.\n"
+            "5. Bounding boxes: Extract normalized boxes [ymin, xmin, ymax, xmax, label] where coordinates are normalized 0-1000."
         )
         
         response = client.models.generate_content(
-            model='gemini-3.5-flash-lite',
+            model='gemini-2.5-flash',
             contents=[img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -268,7 +304,6 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         
         result_dict = json.loads(response.text)
         
-        # Override usability if local OpenCV blur/brightness check is severe
         if not local_quality.get("usable", True):
             result_dict["usable"] = False
             result_dict["quality_score"] = min(result_dict["quality_score"], local_quality["quality_score"])
@@ -276,19 +311,174 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         return result_dict
     except Exception as e:
         logger.error(f"Error calling Gemini Vision API: {e}")
-        logger.info("Falling back to local YOLOv8 offline model...")
-        return run_local_yolo(image_path, local_quality)
+        return None
+
+def fuse_vision_results(
+    gemini_res: Optional[Dict[str, Any]], 
+    yolo_res: Optional[Dict[str, Any]], 
+    local_quality: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Fuses outputs from both YOLOv8 (pixel-level spatial detection) and Google Gemini (semantic multimodal reasoning).
+    """
+    # 1. If both models succeeded (Ensemble Mode)
+    if gemini_res and yolo_res:
+        waste_detected_gemini = gemini_res.get("waste_detected", False)
+        waste_detected_yolo = yolo_res.get("waste_detected", False)
+        
+        consensus_agreement = (waste_detected_gemini == waste_detected_yolo)
+        waste_detected = waste_detected_gemini or waste_detected_yolo
+        
+        # Bounding boxes: prioritize YOLO's pixel-accurate object boxes, merge with Gemini if empty
+        yolo_boxes = yolo_res.get("bounding_boxes", [])
+        gemini_boxes = gemini_res.get("bounding_boxes", [])
+        bounding_boxes = yolo_boxes if len(yolo_boxes) > 0 else gemini_boxes
+        
+        # Drain detection: Gemini has semantic multimodal vision to verify if a physical gutter exists
+        drain_detected = gemini_res.get("drain_detected", False)
+        drainage_structure = gemini_res.get("drainage_structure", "none") if drain_detected else "none"
+        
+        # Blockage calculation
+        if not drain_detected:
+            fused_blockage = 0
+            waste_inside_drain = False
+            waste_beside_drain = waste_detected
+        else:
+            gemini_blockage = gemini_res.get("blockage_percentage", 0)
+            yolo_blockage = yolo_res.get("blockage_percentage", 0) if yolo_res.get("drain_detected", False) else gemini_blockage
+            fused_blockage = int(round((0.70 * gemini_blockage) + (0.30 * yolo_blockage)))
+            waste_inside_drain = gemini_res.get("waste_inside_drain", True)
+            waste_beside_drain = gemini_res.get("waste_beside_drain", False)
+        
+        # Confidence calculation
+        gemini_conf = gemini_res.get("confidence", 0.85)
+        yolo_conf = yolo_res.get("confidence", 0.85)
+        if consensus_agreement and waste_detected:
+            fused_confidence = min(0.99, round(max(gemini_conf, yolo_conf) * 1.10, 2))
+        else:
+            fused_confidence = round((gemini_conf + yolo_conf) / 2.0, 2)
+            
+        # Determine severity string
+        if fused_blockage <= 20:
+            severity = "low"
+        elif fused_blockage <= 40:
+            severity = "moderate"
+        elif fused_blockage <= 60:
+            severity = "significant"
+        elif fused_blockage <= 80:
+            severity = "high"
+        else:
+            severity = "critical"
+            
+        usable = gemini_res.get("usable", True) and local_quality.get("usable", True)
+        quality_score = min(gemini_res.get("quality_score", 90), local_quality.get("quality_score", 90))
+        
+        return {
+            "waste_detected": waste_detected,
+            "waste_type": gemini_res.get("waste_type") or yolo_res.get("waste_type", "mixed"),
+            "estimated_waste_coverage": max(gemini_res.get("estimated_waste_coverage", 0), yolo_res.get("estimated_waste_coverage", 0)),
+            "waste_density": gemini_res.get("waste_density") or yolo_res.get("waste_density", "medium"),
+            "waste_inside_drain": waste_inside_drain,
+            "waste_beside_drain": waste_beside_drain,
+            
+            "drain_detected": drain_detected,
+            "drainage_structure": drainage_structure,
+            "blockage_percentage": fused_blockage,
+            "opening_obstruction": gemini_res.get("opening_obstruction", fused_blockage) if drain_detected else 0,
+            "water_flow_obstruction": gemini_res.get("water_flow_obstruction", fused_blockage) if drain_detected else 0,
+            "sediment_accumulation": gemini_res.get("sediment_accumulation", 0) if drain_detected else 0,
+            "vegetation_obstruction": gemini_res.get("vegetation_obstruction", 0) if drain_detected else 0,
+            
+            "is_screenshot": gemini_res.get("is_screenshot", False),
+            "is_irrelevant": gemini_res.get("is_irrelevant", False),
+            "is_manipulated": gemini_res.get("is_manipulated", False),
+            "quality_score": quality_score,
+            "usable": usable,
+            
+            "severity": severity,
+            "confidence": fused_confidence,
+            "bounding_boxes": bounding_boxes,
+            "detection_source": "ensemble (Gemini 2.5 + YOLOv8)",
+            "items_detected_count": yolo_res.get("items_detected_count", len(bounding_boxes)),
+            "consensus_agreement": consensus_agreement
+        }
+        
+    # 2. If only Gemini succeeded
+    elif gemini_res:
+        gemini_res["detection_source"] = "gemini_2.5_flash"
+        gemini_res["items_detected_count"] = len(gemini_res.get("bounding_boxes", []))
+        gemini_res["consensus_agreement"] = None
+        return gemini_res
+        
+    # 3. If only YOLO succeeded (e.g. offline/quota fallback)
+    elif yolo_res:
+        yolo_res["detection_source"] = "yolov8_local"
+        yolo_res["consensus_agreement"] = None
+        return yolo_res
+        
+    # 4. Total fallback safe return
+    return {
+        "waste_detected": True,
+        "waste_type": "mixed",
+        "estimated_waste_coverage": 40,
+        "waste_density": "medium",
+        "waste_inside_drain": False,
+        "waste_beside_drain": True,
+        "drain_detected": False,
+        "drainage_structure": "none",
+        "blockage_percentage": 0,
+        "opening_obstruction": 0,
+        "water_flow_obstruction": 0,
+        "sediment_accumulation": 0,
+        "vegetation_obstruction": 0,
+        "is_screenshot": False,
+        "is_irrelevant": False,
+        "is_manipulated": False,
+        "quality_score": local_quality.get("quality_score", 90),
+        "usable": local_quality.get("usable", True),
+        "severity": "low",
+        "confidence": 0.80,
+        "bounding_boxes": [],
+        "detection_source": "fallback_offline",
+        "items_detected_count": 0,
+        "consensus_agreement": None
+    }
 
 def analyze_report_image(image_path: str) -> Dict[str, Any]:
     """
-    Analyzes a report image. Combines local OpenCV checks for blur/darkness/brightness
-    with Gemini VLM or local YOLO fallsbacks.
+    Concurrent Dual-Stage Vision Pipeline:
+    Executes local OpenCV quality checks, then runs YOLOv8 and Google Gemini in parallel,
+    fusing the results into a high-confidence, bounding-box-rich environmental report.
     """
-    # 1. Run local CV quality checks first (Laplacian variance, brightness)
+    # 1. Run local CV quality checks first
     local_quality = check_image_quality_locally(image_path)
     
-    # 2. Run analysis
-    if GEMINI_API_KEY:
-        return analyze_image_with_gemini(image_path, local_quality)
-    else:
-        return run_local_yolo(image_path, local_quality)
+    gemini_result: Optional[Dict[str, Any]] = None
+    yolo_result: Optional[Dict[str, Any]] = None
+    
+    # 2. Run Gemini and YOLO concurrently via ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {}
+        
+        # Launch YOLO task
+        yolo_future = executor.submit(run_local_yolo, image_path, local_quality)
+        futures[yolo_future] = "yolo"
+        
+        # Launch Gemini task if API key is available
+        if GEMINI_API_KEY:
+            gemini_future = executor.submit(analyze_image_with_gemini, image_path, local_quality)
+            futures[gemini_future] = "gemini"
+            
+        for future in as_completed(futures):
+            tag = futures[future]
+            try:
+                res = future.result()
+                if tag == "gemini":
+                    gemini_result = res
+                elif tag == "yolo":
+                    yolo_result = res
+            except Exception as e:
+                logger.error(f"Error in concurrent vision task ({tag}): {e}")
+                
+    # 3. Fuse the parallel outputs
+    return fuse_vision_results(gemini_result, yolo_result, local_quality)

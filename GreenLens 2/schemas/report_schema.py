@@ -22,29 +22,42 @@ class VerifyCleanupResponse(BaseModel):
     verified: bool
     improvement_percentage: int
     explanation: str
+    consensus_verified: Optional[bool] = None
+    verification_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
 
 class AiAnalysisResult(BaseModel):
     report_id: str
-    status: str
-    fraud_flag: bool
-    waste_detected: bool
-    waste_type: str
-    blockage_percentage: int
-    risk_score: float
-    risk_level: str
+    status: str = "SUBMITTED"
+    fraud_flag: bool = False
+    waste_detected: bool = False
+    waste_type: str = "none"
+    blockage_percentage: int = 0
+    risk_score: float = 0.0
+    risk_level: str = "LOW"
     nearest_segment_name: Optional[str] = None
     proximity_level: Optional[str] = None
     proximity_distance_meters: Optional[float] = None
-    confidence: float
-    quality_score: int
-    usable: bool
+    confidence: float = 0.90
+    quality_score: int = 90
+    usable: bool = True
     maintenance_message: Optional[str] = None
     days_until_critical: Optional[int] = None
-    rain_24h_mm: float
-    rain_probability_24h: int
+    rain_24h_mm: float = 0.0
+    rain_probability_24h: int = 0
     bounding_boxes: List[Any] = []
     dispatch_recommendation: Optional[Dict[str, Any]] = None
     risk_contributions: Optional[Dict[str, Any]] = None
+    detection_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
+    items_detected_count: Optional[int] = 0
+    consensus_agreement: Optional[bool] = None
+
+class AnalysisStageEvent(BaseModel):
+    stage: str # "IMAGE_DOWNLOAD", "VISION_ANALYSIS", "RISK_ASSESSMENT", "COMPLETE", "FAILED"
+    status: str # "PROCESSING", "SUCCESS", "FAILED"
+    message: str
+    details: Optional[Dict[str, Any]] = None
+    result: Optional[AiAnalysisResult] = None
+    error: Optional[str] = None
 
 # Weather Schemas
 class WeatherDailyForecast(BaseModel):

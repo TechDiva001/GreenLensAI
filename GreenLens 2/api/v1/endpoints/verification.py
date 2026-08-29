@@ -9,22 +9,7 @@ from core.config import settings
 logger = logging.getLogger("GreenLensAI_V2")
 router = APIRouter()
 
-def download_image_to_file(url: str, filepath: str) -> bool:
-    try:
-        # Check if local file
-        if os.path.exists(url):
-            import shutil
-            shutil.copy(url, filepath)
-            return True
-        response = requests.get(url, stream=True, timeout=15)
-        response.raise_for_status()
-        with open(filepath, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to download image from {url}: {e}")
-        return False
+from services.report_service import download_image as download_image_to_file
 
 @router.post("/verify-cleanup", response_model=VerifyCleanupResponse)
 async def verify_report_cleanup(req: VerifyCleanupRequest):
@@ -65,7 +50,9 @@ async def verify_report_cleanup(req: VerifyCleanupRequest):
             verification_result=v_res,
             verified=is_verified,
             improvement_percentage=improvement,
-            explanation=explanation
+            explanation=explanation,
+            consensus_verified=v_res.get("consensus_verified"),
+            verification_source=v_res.get("verification_source", "ensemble (Gemini 2.5 + YOLOv8)")
         )
 
     except HTTPException:
