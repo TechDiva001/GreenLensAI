@@ -22,6 +22,8 @@ class VerifyCleanupResponse(BaseModel):
     verified: bool
     improvement_percentage: int
     explanation: str
+    consensus_verified: Optional[bool] = None
+    verification_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
 
 class AiAnalysisResult(BaseModel):
     report_id: str
@@ -45,6 +47,9 @@ class AiAnalysisResult(BaseModel):
     bounding_boxes: List[Any] = []
     dispatch_recommendation: Optional[Dict[str, Any]] = None
     risk_contributions: Optional[Dict[str, Any]] = None
+    detection_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
+    items_detected_count: Optional[int] = 0
+    consensus_agreement: Optional[bool] = None
 
 # Weather Schemas
 class WeatherDailyForecast(BaseModel):

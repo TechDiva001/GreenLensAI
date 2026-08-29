@@ -65,7 +65,9 @@ async def verify_report_cleanup(req: VerifyCleanupRequest):
             verification_result=v_res,
             verified=is_verified,
             improvement_percentage=improvement,
-            explanation=explanation
+            explanation=explanation,
+            consensus_verified=v_res.get("consensus_verified"),
+            verification_source=v_res.get("verification_source", "ensemble (Gemini 2.5 + YOLOv8)")
         )
 
     except HTTPException:
