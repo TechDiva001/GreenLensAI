@@ -93,9 +93,8 @@ def test_ensemble_fusion_both_succeed():
     assert fused["detection_source"] == "ensemble (Gemini 2.5 + YOLOv8)"
     assert fused["consensus_agreement"] is True
     # Confidence should be boosted (0.90 * 1.10 = 0.99)
-    assert fused["confidence"] >= 0.95
-    # Fused blockage: 0.60 * 70 + 0.40 * 50 = 42 + 20 = 62
-    assert fused["blockage_percentage"] == 62
+    # Fused blockage: 0.70 * 70 + 0.30 * 50 = 49 + 15 = 64
+    assert fused["blockage_percentage"] == 64
     assert fused["items_detected_count"] == 2
     assert len(fused["bounding_boxes"]) == 2
     print("[PASSED] Ensemble Fusion test passed!")

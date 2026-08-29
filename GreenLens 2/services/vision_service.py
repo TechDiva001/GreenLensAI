@@ -191,7 +191,9 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
         sediment_acc = 0
         veg_obs = 0
         
-        if waste_detected:
+        # Only set drain_detected if specific drain class is in detected classes
+        drain_classes = [c.lower() for c in detected_classes if any(k in c.lower() for k in ['drain', 'gutter', 'culvert', 'ditch'])]
+        if len(drain_classes) > 0:
             drain_detected = True
             drainage_structure = "open gutter"
             blockage_percentage = min(95, int(estimated_waste_coverage * 1.1))
@@ -207,6 +209,12 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
                 severity = "high"
             else:
                 severity = "critical"
+        elif waste_detected:
+            # Waste is detected, but on open ground/road with no verified drain
+            drain_detected = False
+            drainage_structure = "none"
+            blockage_percentage = 0
+            severity = "low" if estimated_waste_coverage <= 30 else "moderate"
                 
         return {
             "waste_detected": waste_detected,
@@ -214,7 +222,7 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             "estimated_waste_coverage": estimated_waste_coverage,
             "waste_density": waste_density,
             "waste_inside_drain": drain_detected,
-            "waste_beside_drain": not drain_detected if waste_detected else False,
+            "waste_beside_drain": waste_detected and not drain_detected,
             
             "drain_detected": drain_detected,
             "drainage_structure": drainage_structure,
@@ -242,21 +250,21 @@ def run_local_yolo(image_path: str, local_quality: Dict[str, Any]) -> Dict[str, 
             "waste_type": "mixed",
             "estimated_waste_coverage": 40,
             "waste_density": "medium",
-            "waste_inside_drain": True,
-            "waste_beside_drain": False,
-            "drain_detected": True,
-            "drainage_structure": "open gutter",
-            "blockage_percentage": 45,
-            "opening_obstruction": 45,
-            "water_flow_obstruction": 45,
-            "sediment_accumulation": 20,
-            "vegetation_obstruction": 10,
+            "waste_inside_drain": False,
+            "waste_beside_drain": True,
+            "drain_detected": False,
+            "drainage_structure": "none",
+            "blockage_percentage": 0,
+            "opening_obstruction": 0,
+            "water_flow_obstruction": 0,
+            "sediment_accumulation": 0,
+            "vegetation_obstruction": 0,
             "is_screenshot": False,
             "is_irrelevant": False,
             "is_manipulated": False,
             "quality_score": local_quality.get("quality_score", 90),
             "usable": local_quality.get("usable", True),
-            "severity": "significant",
+            "severity": "low",
             "confidence": 0.80,
             "bounding_boxes": [],
             "items_detected_count": 0
@@ -274,12 +282,14 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         img = Image.open(image_path)
         
         prompt = (
-            "Analyze this image of a roadside, urban street, or drainage area for environmental issues.\n"
+            "Analyze this environmental image with high precision.\n"
             "Assess the following:\n"
-            "1. Waste Detection: is waste present, type, coverage (0-100), density (high/medium/low), location inside/beside drain.\n"
-            "2. Drainage Detection: is a drain present, structure type, blockage (0-100), opening obstruction (0-100), water flow obstruction (0-100), sediment buildup (0-100), vegetation obstruction (0-100).\n"
-            "3. Image Quality: check if it's a screenshot, irrelevant image, or digitally manipulated image. Provide a quality score (0-100) and state if it is usable for municipal reporting.\n"
-            "4. Bounding boxes: extract normalized boxes [ymin, xmin, ymax, xmax, label] where coordinates are normalized 0-1000."
+            "1. Drainage Detection: Carefully inspect if a physical drainage infrastructure is present (such as an open concrete gutter, road trench, culvert, ditch, storm drain, or water channel). "
+            "If NO drain is present (e.g. open road, sidewalk, bare ground, floor, grassy yard with no gutter), strictly set drain_detected = false, drainage_structure = 'none', blockage_percentage = 0, opening_obstruction = 0, water_flow_obstruction = 0, waste_inside_drain = false.\n"
+            "2. Waste Detection: Is waste/trash present? Identify type ('plastic', 'paper', 'glass', 'metal', 'organic', 'textile', 'construction waste', 'mixed', or 'none'), estimated coverage percentage (0-100), density ('high', 'medium', 'low', 'none'). Is the waste inside a drain or on open ground beside a drain?\n"
+            "3. If a drain IS present, estimate blockage_percentage (0-100), opening obstruction, flow obstruction, sediment, and vegetation.\n"
+            "4. Image Quality: Check if it's a screenshot, irrelevant meme/selfie, or digitally manipulated. Provide quality score (0-100) and state if usable for municipal reporting.\n"
+            "5. Bounding boxes: Extract normalized boxes [ymin, xmin, ymax, xmax, label] where coordinates are normalized 0-1000."
         )
         
         response = client.models.generate_content(
@@ -324,16 +334,26 @@ def fuse_vision_results(
         gemini_boxes = gemini_res.get("bounding_boxes", [])
         bounding_boxes = yolo_boxes if len(yolo_boxes) > 0 else gemini_boxes
         
-        # Weighted blockage calculation: 60% Gemini semantic context + 40% YOLO coverage
-        gemini_blockage = gemini_res.get("blockage_percentage", 0)
-        yolo_blockage = yolo_res.get("blockage_percentage", 0)
-        fused_blockage = int(round((0.60 * gemini_blockage) + (0.40 * yolo_blockage)))
+        # Drain detection: Gemini has semantic multimodal vision to verify if a physical gutter exists
+        drain_detected = gemini_res.get("drain_detected", False)
+        drainage_structure = gemini_res.get("drainage_structure", "none") if drain_detected else "none"
+        
+        # Blockage calculation
+        if not drain_detected:
+            fused_blockage = 0
+            waste_inside_drain = False
+            waste_beside_drain = waste_detected
+        else:
+            gemini_blockage = gemini_res.get("blockage_percentage", 0)
+            yolo_blockage = yolo_res.get("blockage_percentage", 0) if yolo_res.get("drain_detected", False) else gemini_blockage
+            fused_blockage = int(round((0.70 * gemini_blockage) + (0.30 * yolo_blockage)))
+            waste_inside_drain = gemini_res.get("waste_inside_drain", True)
+            waste_beside_drain = gemini_res.get("waste_beside_drain", False)
         
         # Confidence calculation
         gemini_conf = gemini_res.get("confidence", 0.85)
         yolo_conf = yolo_res.get("confidence", 0.85)
         if consensus_agreement and waste_detected:
-            # Boost confidence when both AI engines agree
             fused_confidence = min(0.99, round(max(gemini_conf, yolo_conf) * 1.10, 2))
         else:
             fused_confidence = round((gemini_conf + yolo_conf) / 2.0, 2)
@@ -358,16 +378,16 @@ def fuse_vision_results(
             "waste_type": gemini_res.get("waste_type") or yolo_res.get("waste_type", "mixed"),
             "estimated_waste_coverage": max(gemini_res.get("estimated_waste_coverage", 0), yolo_res.get("estimated_waste_coverage", 0)),
             "waste_density": gemini_res.get("waste_density") or yolo_res.get("waste_density", "medium"),
-            "waste_inside_drain": gemini_res.get("waste_inside_drain", True) or yolo_res.get("waste_inside_drain", False),
-            "waste_beside_drain": gemini_res.get("waste_beside_drain", False) or yolo_res.get("waste_beside_drain", False),
+            "waste_inside_drain": waste_inside_drain,
+            "waste_beside_drain": waste_beside_drain,
             
-            "drain_detected": gemini_res.get("drain_detected", True) or yolo_res.get("drain_detected", False),
-            "drainage_structure": gemini_res.get("drainage_structure") or yolo_res.get("drainage_structure", "open gutter"),
+            "drain_detected": drain_detected,
+            "drainage_structure": drainage_structure,
             "blockage_percentage": fused_blockage,
-            "opening_obstruction": gemini_res.get("opening_obstruction", fused_blockage),
-            "water_flow_obstruction": gemini_res.get("water_flow_obstruction", fused_blockage),
-            "sediment_accumulation": gemini_res.get("sediment_accumulation", 0),
-            "vegetation_obstruction": gemini_res.get("vegetation_obstruction", 0),
+            "opening_obstruction": gemini_res.get("opening_obstruction", fused_blockage) if drain_detected else 0,
+            "water_flow_obstruction": gemini_res.get("water_flow_obstruction", fused_blockage) if drain_detected else 0,
+            "sediment_accumulation": gemini_res.get("sediment_accumulation", 0) if drain_detected else 0,
+            "vegetation_obstruction": gemini_res.get("vegetation_obstruction", 0) if drain_detected else 0,
             
             "is_screenshot": gemini_res.get("is_screenshot", False),
             "is_irrelevant": gemini_res.get("is_irrelevant", False),
@@ -402,21 +422,21 @@ def fuse_vision_results(
         "waste_type": "mixed",
         "estimated_waste_coverage": 40,
         "waste_density": "medium",
-        "waste_inside_drain": True,
-        "waste_beside_drain": False,
-        "drain_detected": True,
-        "drainage_structure": "open gutter",
-        "blockage_percentage": 45,
-        "opening_obstruction": 45,
-        "water_flow_obstruction": 45,
-        "sediment_accumulation": 20,
-        "vegetation_obstruction": 10,
+        "waste_inside_drain": False,
+        "waste_beside_drain": True,
+        "drain_detected": False,
+        "drainage_structure": "none",
+        "blockage_percentage": 0,
+        "opening_obstruction": 0,
+        "water_flow_obstruction": 0,
+        "sediment_accumulation": 0,
+        "vegetation_obstruction": 0,
         "is_screenshot": False,
         "is_irrelevant": False,
         "is_manipulated": False,
         "quality_score": local_quality.get("quality_score", 90),
         "usable": local_quality.get("usable", True),
-        "severity": "significant",
+        "severity": "low",
         "confidence": 0.80,
         "bounding_boxes": [],
         "detection_source": "fallback_offline",
