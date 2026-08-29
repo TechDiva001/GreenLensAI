@@ -8,5 +8,4 @@ venv/
 uploads/
 .agents/
 scratch/
-Dockerfile
 .dockerignore
