@@ -30,7 +30,7 @@ def health_check():
         "status": "healthy",
         "version": "2.0.1",
         "vision_engine": "Gemini 2.5/1.5 Flash (Cloud)" if settings.GEMINI_API_KEY else "Local YOLOv8 + OpenCV (Offline Fallback)",
-        "weather_engine": "Open-Meteo (Free, No Key)",
+        "weather_engine": "WeatherAPI (api.weatherapi.com)" if settings.WEATHER_API_KEY else "Open-Meteo Fallback",
         "optimization_engine": "Local greedy TSP",
         "assistant_engine": "Gemini RAG" if settings.GEMINI_API_KEY else "Keyword Heuristic Fallback"
     }
