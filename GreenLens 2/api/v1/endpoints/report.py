@@ -15,9 +15,10 @@ async def analyze_image(req: AnalyzeImageRequest):
         result = process_analyze_image(req)
         return result
     except ValueError as ve:
+        logger.warning(f"Validation error in analyze-image API: {ve}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        logger.exception("Error in analyze-image API")
+        logger.exception("Unexpected error in analyze-image API")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"

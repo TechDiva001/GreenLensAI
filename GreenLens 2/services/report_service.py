@@ -147,11 +147,12 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         usable=vision_res.get("usable", True),
         maintenance_message=maintenance_res.get("prediction_message"),
         days_until_critical=maintenance_res.get("days_until_critical"),
-        rain_24h_mm=weather_res.get("rain_24h_mm", 0.0),
+        rain_24h_mm=float(weather_res.get("rain_24h_mm", 0.0)),
+        rain_probability_24h=int(weather_res.get("rain_probability_24h", 0)),
         bounding_boxes=vision_res.get("bounding_boxes", []),
         risk_contributions=risk_res.get("contributions"),
         detection_source=vision_res.get("detection_source", "ensemble (Gemini 2.5 + YOLOv8)"),
-        items_detected_count=vision_res.get("items_detected_count", 0),
+        items_detected_count=int(vision_res.get("items_detected_count", 0)),
         consensus_agreement=vision_res.get("consensus_agreement")
     )
     

@@ -87,6 +87,27 @@ def main():
         assert "verified" in v_data
         print("--> PASS: Cleanup verification endpoint working.")
 
+        # 4B. Test Image Analysis
+        print("\n[TEST 4B] POST /api/ai/analyze-image")
+        res = client.post("/api/ai/analyze-image", json={
+            "image_url": before_abs,
+            "user_id": "usr_test_123",
+            "municipality_id": "1",
+            "latitude": 5.6037,
+            "longitude": -0.1870,
+            "description": "Blocked open gutter test",
+            "historical_flooding": False
+        })
+        print(f"Status: {res.status_code}")
+        a_data = res.json()
+        print(f"  Report ID: {a_data.get('report_id')}")
+        print(f"  Waste Detected: {a_data.get('waste_detected')}")
+        print(f"  Blockage: {a_data.get('blockage_percentage')}%")
+        print(f"  Detection Source: {a_data.get('detection_source')}")
+        assert res.status_code == 200
+        assert "report_id" in a_data
+        print("--> PASS: Image analysis endpoint working.")
+
         # 5. Test Assistant Chat
         print("\n[TEST 5] POST /api/ai/assistant/chat")
         res = client.post("/api/ai/assistant/chat", json={
