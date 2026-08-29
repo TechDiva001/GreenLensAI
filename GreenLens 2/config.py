@@ -15,7 +15,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Local Model Configurations
 YOLO_MODEL_NAME = "yolov8n.pt"
 
-# Open-Meteo Weather API Base URL
+# WeatherAPI Configurations (api.weatherapi.com)
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "03a05cb89e344fcb8ce164434252406")
+WEATHER_API_BASE_URL = os.getenv("WEATHER_API_BASE_URL", "http://api.weatherapi.com/v1")
+
+# Open-Meteo Weather API Base URL (Legacy Fallback)
 OPEN_METEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
 # Default GPS Coordinates (Accra, Ghana)

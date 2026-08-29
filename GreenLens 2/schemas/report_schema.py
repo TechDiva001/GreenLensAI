@@ -13,6 +13,15 @@ class AnalyzeImageRequest(BaseModel):
 class VerifyCleanupRequest(BaseModel):
     report_id: str
     after_image_url: str
+    before_image_url: Optional[str] = None
+
+class VerifyCleanupResponse(BaseModel):
+    report_id: str
+    status: str
+    verification_result: Dict[str, Any]
+    verified: bool
+    improvement_percentage: int
+    explanation: str
 
 class AiAnalysisResult(BaseModel):
     report_id: str
@@ -36,3 +45,45 @@ class AiAnalysisResult(BaseModel):
     bounding_boxes: List[Any] = []
     dispatch_recommendation: Optional[Dict[str, Any]] = None
     risk_contributions: Optional[Dict[str, Any]] = None
+
+# Weather Schemas
+class WeatherDailyForecast(BaseModel):
+    date: Optional[str] = None
+    max_temp_c: Optional[float] = None
+    min_temp_c: Optional[float] = None
+    avg_temp_c: Optional[float] = None
+    total_precip_mm: Optional[float] = 0.0
+    chance_of_rain: Optional[int] = 0
+    condition_text: Optional[str] = "Clear"
+    condition_icon: Optional[str] = ""
+
+class WeatherCurrentResponse(BaseModel):
+    source: str = "WeatherAPI"
+    location: Dict[str, Any]
+    current: Dict[str, Any]
+
+class WeatherForecastResponse(BaseModel):
+    source: str = "WeatherAPI"
+    location: Dict[str, Any]
+    current: Dict[str, Any]
+    rain_24h_mm: float
+    rain_48h_mm: float
+    rain_probability_24h: int
+    rain_probability_48h: int
+    daily_forecast: List[WeatherDailyForecast] = []
+
+# Assistant Schemas
+class ChatRequest(BaseModel):
+    query: str
+    user_id: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    sources: Optional[List[str]] = []
+
+class DailySummaryResponse(BaseModel):
+    summary: str
+    timestamp: str
+    report_count: int
+    critical_count: int
+    high_count: int
