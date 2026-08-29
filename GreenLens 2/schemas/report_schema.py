@@ -51,6 +51,14 @@ class AiAnalysisResult(BaseModel):
     items_detected_count: Optional[int] = 0
     consensus_agreement: Optional[bool] = None
 
+class AnalysisStageEvent(BaseModel):
+    stage: str # "IMAGE_DOWNLOAD", "VISION_ANALYSIS", "RISK_ASSESSMENT", "COMPLETE", "FAILED"
+    status: str # "PROCESSING", "SUCCESS", "FAILED"
+    message: str
+    details: Optional[Dict[str, Any]] = None
+    result: Optional[AiAnalysisResult] = None
+    error: Optional[str] = None
+
 # Weather Schemas
 class WeatherDailyForecast(BaseModel):
     date: Optional[str] = None
