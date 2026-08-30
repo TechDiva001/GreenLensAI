@@ -129,6 +129,9 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         historical_flooding=req.historical_flooding
     )
     
+    # Extract waste quantity
+    qty_data = vision_res.get("waste_quantity") or {}
+    
     # Compile the result
     result = AiAnalysisResult(
         report_id=report_id,
@@ -153,7 +156,12 @@ def process_analyze_image(req: AnalyzeImageRequest) -> AiAnalysisResult:
         risk_contributions=risk_res.get("contributions"),
         detection_source=vision_res.get("detection_source", "ensemble (Gemini 2.5 + YOLOv8)"),
         items_detected_count=int(vision_res.get("items_detected_count", 0)),
-        consensus_agreement=vision_res.get("consensus_agreement")
+        consensus_agreement=vision_res.get("consensus_agreement"),
+        waste_quantity=qty_data if qty_data else None,
+        estimated_volume_m3=float(qty_data.get("volume_m3", 0.0)),
+        estimated_weight_kg=float(qty_data.get("weight_kg", 0.0)),
+        cleanup_bags_needed=int(qty_data.get("bags_count", 0)),
+        tricycle_trips_needed=int(qty_data.get("tricycle_trips", 0))
     )
     
     # 7. Write to Supabase is now handled by the frontend
@@ -255,6 +263,7 @@ async def process_analyze_image_generator(req: AnalyzeImageRequest):
         
         # Stage 4: Compile Final Result
         fraud_flag = False
+        qty_data = vision_res.get("waste_quantity") or {}
         result = AiAnalysisResult(
             report_id=report_id,
             status="SUBMITTED" if not fraud_flag else "UNDER_REVIEW",
@@ -278,7 +287,12 @@ async def process_analyze_image_generator(req: AnalyzeImageRequest):
             risk_contributions=risk_res.get("contributions"),
             detection_source=vision_res.get("detection_source", "ensemble (Gemini 2.5 + YOLOv8)"),
             items_detected_count=int(vision_res.get("items_detected_count", 0)),
-            consensus_agreement=vision_res.get("consensus_agreement")
+            consensus_agreement=vision_res.get("consensus_agreement"),
+            waste_quantity=qty_data if qty_data else None,
+            estimated_volume_m3=float(qty_data.get("volume_m3", 0.0)),
+            estimated_weight_kg=float(qty_data.get("weight_kg", 0.0)),
+            cleanup_bags_needed=int(qty_data.get("bags_count", 0)),
+            tricycle_trips_needed=int(qty_data.get("tricycle_trips", 0))
         )
         
         yield {
