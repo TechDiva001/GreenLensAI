@@ -25,6 +25,16 @@ class VerifyCleanupResponse(BaseModel):
     consensus_verified: Optional[bool] = None
     verification_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
 
+class WasteQuantityEstimate(BaseModel):
+    volume_m3: float = 0.0
+    weight_kg: float = 0.0
+    weight_tons: float = 0.0
+    bags_count: int = 0
+    tricycle_trips: int = 0
+    truck_loads: float = 0.0
+    density_kg_m3: float = 300.0
+    cleanup_urgency: str = "STANDARD"
+
 class AiAnalysisResult(BaseModel):
     report_id: str
     status: str = "SUBMITTED"
@@ -50,6 +60,11 @@ class AiAnalysisResult(BaseModel):
     detection_source: Optional[str] = "ensemble (Gemini 2.5 + YOLOv8)"
     items_detected_count: Optional[int] = 0
     consensus_agreement: Optional[bool] = None
+    waste_quantity: Optional[WasteQuantityEstimate] = None
+    estimated_volume_m3: Optional[float] = 0.0
+    estimated_weight_kg: Optional[float] = 0.0
+    cleanup_bags_needed: Optional[int] = 0
+    tricycle_trips_needed: Optional[int] = 0
 
 class AnalysisStageEvent(BaseModel):
     stage: str # "IMAGE_DOWNLOAD", "VISION_ANALYSIS", "RISK_ASSESSMENT", "COMPLETE", "FAILED"

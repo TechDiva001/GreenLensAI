@@ -408,15 +408,36 @@ def fuse_vision_results(
         gemini_res["detection_source"] = "gemini_2.5_flash"
         gemini_res["items_detected_count"] = len(gemini_res.get("bounding_boxes", []))
         gemini_res["consensus_agreement"] = None
+        gemini_res["waste_quantity"] = calculate_waste_quantity(
+            waste_type=gemini_res.get("waste_type", "mixed"),
+            blockage_percentage=gemini_res.get("blockage_percentage", 0),
+            estimated_waste_coverage=gemini_res.get("estimated_waste_coverage", 0),
+            drain_detected=gemini_res.get("drain_detected", False),
+            drainage_structure=gemini_res.get("drainage_structure", "none")
+        )
         return gemini_res
         
     # 3. If only YOLO succeeded (e.g. offline/quota fallback)
     elif yolo_res:
         yolo_res["detection_source"] = "yolov8_local"
         yolo_res["consensus_agreement"] = None
+        yolo_res["waste_quantity"] = calculate_waste_quantity(
+            waste_type=yolo_res.get("waste_type", "mixed"),
+            blockage_percentage=yolo_res.get("blockage_percentage", 0),
+            estimated_waste_coverage=yolo_res.get("estimated_waste_coverage", 0),
+            drain_detected=yolo_res.get("drain_detected", False),
+            drainage_structure=yolo_res.get("drainage_structure", "none")
+        )
         return yolo_res
         
     # 4. Total fallback safe return
+    fallback_qty = calculate_waste_quantity(
+        waste_type="mixed",
+        blockage_percentage=0,
+        estimated_waste_coverage=40,
+        drain_detected=False,
+        drainage_structure="none"
+    )
     return {
         "waste_detected": True,
         "waste_type": "mixed",
@@ -441,7 +462,93 @@ def fuse_vision_results(
         "bounding_boxes": [],
         "detection_source": "fallback_offline",
         "items_detected_count": 0,
-        "consensus_agreement": None
+        "consensus_agreement": None,
+        "waste_quantity": fallback_qty
+    }
+
+def calculate_waste_quantity(
+    waste_type: str,
+    blockage_percentage: int,
+    estimated_waste_coverage: int,
+    drain_detected: bool,
+    drainage_structure: str = "none"
+) -> Dict[str, Any]:
+    """
+    Civil Engineering Waste Volume & Mass Estimator:
+    Computes physical volume (m³), mass/weight (kg and metric tons),
+    and cleanup logistics (50kg bags, tricycle loads, truck loads)
+    based on material bulk density and channel hydraulic dimensions.
+    """
+    import math
+    
+    clean_type = waste_type.lower().strip()
+    
+    # Material bulk densities (kg/m³)
+    density_map = {
+        "plastic": 85.0,
+        "organic": 420.0,
+        "paper": 150.0,
+        "metal": 550.0,
+        "glass": 600.0,
+        "silt": 1450.0,
+        "sand": 1450.0,
+        "sludge": 1450.0,
+        "construction": 1500.0,
+        "construction waste": 1500.0,
+        "rubble": 1500.0,
+        "concrete": 1500.0,
+        "textile": 180.0,
+        "mixed": 300.0
+    }
+    
+    # Match density
+    density = 300.0
+    for key, val in density_map.items():
+        if key in clean_type:
+            density = val
+            break
+            
+    # Volume calculation
+    # Standard urban drainage baseline section: 4.0m length x 0.8m width x 0.9m depth = 2.88 m³
+    if drain_detected and blockage_percentage > 0:
+        total_channel_volume = 2.88
+        volume_m3 = round(total_channel_volume * (blockage_percentage / 100.0), 2)
+    elif estimated_waste_coverage > 0:
+        # Open ground dumpsite baseline: 6.0 m² surface x 0.35m average pile height = 2.1 m³
+        total_ground_volume = 2.10
+        volume_m3 = round(total_ground_volume * (estimated_waste_coverage / 100.0), 2)
+    else:
+        volume_m3 = 0.0
+        
+    weight_kg = round(volume_m3 * density, 1)
+    weight_tons = round(weight_kg / 1000.0, 2)
+    
+    # Logistics metrics:
+    # 50kg heavy-duty bags (practical effective load 25kg)
+    bags_count = math.ceil(weight_kg / 25.0) if weight_kg > 0 else 0
+    # Motorized tricycle (Aboboyaa) capacity: 0.8 m³
+    tricycle_trips = math.ceil(volume_m3 / 0.8) if volume_m3 > 0 else 0
+    # Compactor truck capacity: 10.0 m³
+    truck_loads = round(volume_m3 / 10.0, 2)
+    
+    if blockage_percentage >= 75 or weight_kg >= 500:
+        urgency = "IMMEDIATE"
+    elif blockage_percentage >= 50 or weight_kg >= 200:
+        urgency = "URGENT"
+    elif blockage_percentage >= 25 or weight_kg >= 50:
+        urgency = "STANDARD"
+    else:
+        urgency = "ROUTINE"
+        
+    return {
+        "volume_m3": volume_m3,
+        "weight_kg": weight_kg,
+        "weight_tons": weight_tons,
+        "bags_count": bags_count,
+        "tricycle_trips": tricycle_trips,
+        "truck_loads": truck_loads,
+        "density_kg_m3": density,
+        "cleanup_urgency": urgency
     }
 
 def analyze_report_image(image_path: str) -> Dict[str, Any]:
@@ -481,4 +588,13 @@ def analyze_report_image(image_path: str) -> Dict[str, Any]:
                 logger.error(f"Error in concurrent vision task ({tag}): {e}")
                 
     # 3. Fuse the parallel outputs
-    return fuse_vision_results(gemini_result, yolo_result, local_quality)
+    fused = fuse_vision_results(gemini_result, yolo_result, local_quality)
+    if "waste_quantity" not in fused or fused["waste_quantity"] is None:
+        fused["waste_quantity"] = calculate_waste_quantity(
+            waste_type=fused.get("waste_type", "mixed"),
+            blockage_percentage=fused.get("blockage_percentage", 0),
+            estimated_waste_coverage=fused.get("estimated_waste_coverage", 0),
+            drain_detected=fused.get("drain_detected", False),
+            drainage_structure=fused.get("drainage_structure", "none")
+        )
+    return fused
