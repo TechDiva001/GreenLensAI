@@ -19,12 +19,16 @@ YOLO_MODEL_NAME = "yolov8n.pt"
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "03a05cb89e344fcb8ce164434252406")
 WEATHER_API_BASE_URL = os.getenv("WEATHER_API_BASE_URL", "http://api.weatherapi.com/v1")
 
-# Open-Meteo Weather API Base URL (Legacy Fallback)
-OPEN_METEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
+# Open-Meteo Weather API Base URL (Primary Real-Time Engine)
+OPEN_METEO_BASE_URL = os.getenv("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast")
 
-# Default GPS Coordinates (Accra, Ghana)
-DEFAULT_LAT = 5.6037
-DEFAULT_LON = -0.1870
+# Default GPS Coordinates (Winneba, Ghana: Lat 5.34352 N, Lon -0.62566 W)
+DEFAULT_LAT = float(os.getenv("DEFAULT_LAT", "5.34352"))
+DEFAULT_LON = float(os.getenv("DEFAULT_LON", "-0.62566"))
+
+# Rational Runoff Method Parameters (Civil Hydrology)
+DEFAULT_RUNOFF_COEFFICIENT_C = 0.75  # Urban impervious catchment
+DEFAULT_SURCHARGE_THRESHOLD_MM_H = 3.0  # Rainfall intensity threshold for surcharge warnings (mm/h)
 
 # Image similarity threshold for dHash (Lower means more similar, 0-64 scale)
 DUPLICATE_HASH_THRESHOLD = 10
