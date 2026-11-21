@@ -8,7 +8,7 @@ from PIL import Image
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from config import GEMINI_API_KEY, YOLO_MODEL_NAME
+from config import GEMINI_API_KEY, YOLO_MODEL_NAME, GEMINI_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +293,7 @@ def analyze_image_with_gemini(image_path: str, local_quality: Dict[str, Any]) ->
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=GEMINI_MODEL,
             contents=[img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

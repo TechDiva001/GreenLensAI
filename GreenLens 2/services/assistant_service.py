@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any
-from config import GEMINI_API_KEY
+from config import GEMINI_API_KEY, GEMINI_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def generate_daily_summary(reports: List[Dict[str, Any]]) -> str:
                 f"Keep it professional, bulleted, and less than 150 words."
             )
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model=GEMINI_MODEL,
                 contents=prompt
             )
             return response.text.strip()
@@ -83,7 +83,7 @@ def chat_municipal_assistant(query: str, reports: List[Dict[str, Any]]) -> str:
                 f"Answer:"
             )
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model=GEMINI_MODEL,
                 contents=prompt
             )
             return response.text.strip()

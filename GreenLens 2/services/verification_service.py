@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import (
     GEMINI_API_KEY, 
+    GEMINI_MODEL,
     DUPLICATE_HASH_THRESHOLD, 
     DUPLICATE_DISTANCE_THRESHOLD_METERS,
     DUPLICATE_TIME_THRESHOLD_HOURS
@@ -177,7 +178,7 @@ def run_gemini_cleanup_verification(before_path: str, after_path: str) -> Option
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=GEMINI_MODEL,
             contents=[before_img, after_img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
