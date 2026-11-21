@@ -10,3 +10,4 @@ python-multipart
 imagehash
 pillow
 supabase
+python-dotenv

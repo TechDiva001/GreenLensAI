@@ -216,18 +216,14 @@ async def record_flood_history_event(event: FloodEventHistoryCreate):
     and citizen ground-truth reports for municipal auditing and neural model training.
     """
     try:
-        from datetime import datetime, timezone
-        event_dict = event.model_dump()
-        event_dict["id"] = int(datetime.now().timestamp() * 1000)
-        event_dict["created_at"] = datetime.now(timezone.utc).isoformat()
-        if not event_dict.get("event_timestamp"):
-            event_dict["event_timestamp"] = event_dict["created_at"]
-            
+        from crud.flood_history_crud import insert_flood_event
+        event_dict = event.model_dump(mode="json")
+        saved_record = insert_flood_event(event_dict)
         logger.info(f"Recorded flood event history: {event.catchment_name} - Severity: {event.severity}")
         return {
             "status": "success",
             "message": "Flood event history logged successfully.",
-            "data": event_dict
+            "data": saved_record
         }
     except Exception as e:
         logger.exception("Error recording flood event history")
@@ -245,8 +241,14 @@ async def get_flood_event_history(
 ):
     """
     Retrieves archived flood events, surcharge history, and outcomes for a catchment.
+    Queries Supabase when connected; falls back to structured baseline data if table is unseeded or offline.
     """
     try:
+        from crud.flood_history_crud import query_flood_events
+        db_records = query_flood_events(catchment=catchment, severity=severity, limit=limit)
+        if db_records is not None and len(db_records) > 0:
+            return db_records
+
         from datetime import datetime, timezone, timedelta
         now = datetime.now(timezone.utc)
         

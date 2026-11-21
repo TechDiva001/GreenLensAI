@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API configuration
 PORT = int(os.getenv("PORT", 8000))
